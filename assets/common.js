@@ -1,10 +1,11 @@
 (function () {
+  // ================== Claves de almacenamiento ==================
   const STORAGE_KEY = "dash_rows_v18";
   const PREFS_KEY   = "dash_prefs_v18";
   const USER_KEY    = "dash_current_user_v18";
   const USERS_KEY   = "dash_users_v18";
 
-  // ---------- IndexedDB KV (para datos grandes) ----------
+  // ================== IndexedDB KV (para datos grandes) ==================
   const DB_NAME = "dash_db_v18";
   const STORE   = "kvs";
   let dbp = null;
@@ -54,7 +55,7 @@
     });
   }
 
-  // ---------- Utilidades UI / export ----------
+  // ================== UI / Export ==================
   function setStatus(el, msg, isError) {
     if (!el) return;
     el.textContent = msg;
@@ -83,7 +84,7 @@
     download(filename, csv, "text/csv;charset=utf-8;");
   }
 
-  // ---------- Persistencia de filas / prefs ----------
+  // ================== Persistencia de filas / prefs ==================
   async function saveRows(rows) {
     try { await idbSet(STORAGE_KEY, rows || []); }
     catch (e) { console.error(e); alert("No se pudieron guardar los datos localmente (cuota o permisos). Seguirán en memoria hasta cerrar la pestaña."); }
@@ -94,7 +95,7 @@
   function savePrefs(p) { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p || {})); } catch {} }
   function loadPrefs()  { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}"); } catch { return {}; } }
 
-  // ---------- Parser de archivos (XLSX/CSV) ----------
+  // ================== Parser de archivos (XLSX/CSV) ==================
   async function parseFile(file) {
     const name = (file && file.name ? file.name : "").toLowerCase();
 
@@ -110,7 +111,7 @@
         const sh  = wb.Sheets[wb.SheetNames[0]];
         if (!sh) throw new Error("No se encontró ninguna hoja en el Excel");
 
-        // AoA → encabezados robustos
+        // AoA → encabezados robustos (mantiene nombres; evita duplicados vacíos)
         const aoa = XLSX.utils.sheet_to_json(sh, { header: 1, raw: false, defval: "" });
         if (Array.isArray(aoa) && aoa.length) {
           let headers = (aoa[0] || []).map((h, i) => String(h || "").trim() || `COL_${i + 1}`);
@@ -149,7 +150,7 @@
     });
   }
 
-  // ---------- Helpers de datos ----------
+  // ================== Helpers de datos ==================
   function uniqueVals(rows, col) {
     const s = new Set();
     rows.forEach(r => {
@@ -160,18 +161,67 @@
     });
     return Array.from(s);
   }
-  function detectCol(headers, regs) { return headers.find(h => regs.some(rx => rx.test(h))) || null; }
-  function toDate(val) {
-    if (val == null) return null;
-    const s = String(val).trim();
-    const fmts = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "DD-MM-YYYY"];
-    for (const f of fmts) {
-      const d = dayjs(s, f, true);
-      if (d.isValid()) return d.toDate();
-    }
-    const d2 = dayjs(s);
-    return d2.isValid() ? d2.toDate() : null;
+
+  function detectCol(headers, regs) {
+    return headers.find(h => regs.some(rx => rx.test(h))) || null;
   }
+
+  // >>> toDate ROBUSTA (corrige seriales Excel, ISO, DD/MM/YYYY, etc.) <<<
+  function toDate(val) {
+    if (val == null || val === "") return null;
+
+    // Ya es Date válido
+    if (val instanceof Date && !isNaN(val)) return val;
+
+    // NÚMEROS (serial Excel, timestamps)
+    if (typeof val === "number") {
+      // Serial Excel (sistema 1900): días desde 1899-12-30
+      // Rango típico 20000..60000 ≈ años 1954..2064
+      if (val > 20000 && val < 60000) {
+        return new Date(Math.round((val - 25569) * 86400 * 1000));
+      }
+      // Epoch (ms)
+      if (val > 1e12) return new Date(val);
+      // Epoch (s)
+      if (val > 1e9) return new Date(val * 1000);
+    }
+
+    // CADENAS
+    if (typeof val === "string") {
+      const s = val.trim();
+      if (!s) return null;
+
+      // Serial Excel como string (4-5 dígitos)
+      if (/^\d{4,5}$/.test(s)) {
+        const n = parseInt(s, 10);
+        if (n > 20000 && n < 60000) {
+          return new Date(Math.round((n - 25569) * 86400 * 1000));
+        }
+      }
+
+      // Intento directo (ISO u otros)
+      let d = dayjs(s);
+      if (d.isValid()) return d.toDate();
+
+      // Formatos estrictos más comunes
+      const fmts = [
+        "DD/MM/YYYY", "D/M/YYYY",
+        "YYYY-MM-DD",
+        "MM/DD/YYYY", "M/D/YYYY",
+        "YYYY/MM/DD",
+        "DD-MM-YYYY", "D-M-YYYY",
+        "DD.MM.YYYY", "D.M.YYYY",
+        "DD/MM/YY", "D/M/YY", "DD-MM-YY", "D-M-YY"
+      ];
+      for (const f of fmts) {
+        d = dayjs(s, f, true);
+        if (d.isValid()) return d.toDate();
+      }
+    }
+
+    return null;
+  }
+
   function isValidated(v) {
     if (typeof v === "boolean") return v === true;
     if (typeof v === "number")  return v === 1;
@@ -183,17 +233,26 @@
     return cfg ? (s === cfg) : false;
   }
 
-  // ---------- Autenticación ----------
+  // ================== Autenticación básica (localStorage) ==================
   function getCurrentUser() { try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; } }
   function setCurrentUser(u) { try { localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch {} }
   function clearCurrentUser(){ try { localStorage.removeItem(USER_KEY); } catch {} }
   function loadUsers()      { try { return JSON.parse(localStorage.getItem(USERS_KEY) || "[]"); } catch { return []; } }
   function saveUsers(users) { try { localStorage.setItem(USERS_KEY, JSON.stringify(users || [])); } catch {} }
   function resetUsers()     { try { localStorage.removeItem(USERS_KEY); localStorage.removeItem(USER_KEY); } catch {} }
-  function requireLogin()   { const u = getCurrentUser(); if (!u) { try { sessionStorage.setItem("return_to", location.pathname + location.search); } catch {} location.href = "index.html"; } }
-  function requireRole(role){ const u = getCurrentUser(); return !!(u && u.role === role); }
+  function requireLogin()   {
+    const u = getCurrentUser();
+    if (!u) {
+      try { sessionStorage.setItem("return_to", location.pathname + location.search); } catch {}
+      location.href = "index.html";
+    }
+  }
+  function requireRole(role){
+    const u = getCurrentUser();
+    return !!(u && u.role === role);
+  }
 
-  // Exponer API
+  // ================== Exponer API global ==================
   window.Common = {
     setStatus, exportCSV,
     saveRows, loadRows, clearRows,
