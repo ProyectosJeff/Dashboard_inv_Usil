@@ -10,7 +10,6 @@
   } = C;
 
   // ====== RUTA DEL ARCHIVO CENTRAL (ajústala a donde lo subas en tu repo) ======
-  // Ejemplos:
   //   const CENTRAL_DATA_URL = "./DATA_GENERAL_1.csv";
   //   const CENTRAL_DATA_URL = "./data/DATA_GENERAL_1.csv";
   const CENTRAL_DATA_URL = "./DATA_GENERAL_1.xlsx";
@@ -66,7 +65,7 @@
   function updateKPIs(){
     const total = state.rows.length;
     const sedeCol = state.map.sede;
-       const ultimoCol = state.map.ultimo;
+    const ultimoCol = state.map.ultimo;
     const dateCol = state.map.fecha;
 
     const elTotal = document.getElementById("kpiTotal");
@@ -120,7 +119,7 @@
     return rows;
   }
 
-  // ========= Pivots =========
+  // ========= Pivots existentes =========
   function pivotSedeResumen(rows){
     const sedeCol = state.map.sede, estCol = state.map.estatus;
     if (!sedeCol || !estCol) return {rows:[], totals:{f:0,t:0,all:0}};
@@ -200,6 +199,130 @@
       html.push(`<tr class="row-total"><td>Total ${blk.user}</td><td></td><td></td><td>${blk.total}</td></tr>`);
     }
     tb.innerHTML = html.join("");
+  }
+
+  // ----------------- Sede → COND — helpers -----------------
+  function fillScSede(){
+    const sel = document.getElementById("scSede");
+    if (!sel) return;
+    const sedeCol = state.map.sede;
+    const vals = sedeCol ? uniqueVals(state.rows, sedeCol).sort((a,b)=>a.localeCompare(b)) : [];
+    sel.innerHTML = `<option value="">(Todas)</option>` + vals.map(v=>`<option value="${v}">${v}</option>`).join("");
+    // sincroniza con el filtro global si existe
+    const global = (document.getElementById("filter_sede")||{}).value || "";
+    sel.value = global;
+  }
+
+  // Agrupa por sede ⇒ cond ⇒ conteos de TRUE/FALSE
+  function pivotSedeCond(rows){
+    const sedeCol = state.map.sede;
+    const condCol = state.map.activo;   // "Campo Activo (opcional)" como COND
+    const estCol  = state.map.estatus;
+
+    if (!sedeCol || !condCol || !estCol){
+      return { blocks:[], totals:{f:0,t:0,all:0}, missing:true };
+    }
+
+    const q = ((document.getElementById("scSearch")||{}).value || "").trim().toLowerCase();
+
+    // Estructura: sede -> Map(cond -> {f,t})
+    const bySede = new Map();
+    const totals = { f:0, t:0, all:0 };
+
+    for (const r of rows){
+      const sede = (r[sedeCol] ?? "—").toString().trim() || "—";
+      const cond = (r[condCol] ?? "(en blanco)").toString().trim() || "(en blanco)";
+
+      if (q && !cond.toLowerCase().includes(q)) continue;
+
+      const ok = isValidated(r[estCol]);
+
+      if (!bySede.has(sede)) bySede.set(sede, new Map());
+      const m = bySede.get(sede);
+      if (!m.has(cond)) m.set(cond, {f:0,t:0});
+
+      const cur = m.get(cond);
+      ok ? (cur.t++) : (cur.f++);
+      totals[ ok ? "t" : "f" ]++;
+      totals.all++;
+    }
+
+    const blocks = [];
+    const sedes = Array.from(bySede.keys()).sort((a,b)=>a.localeCompare(b));
+    for (const s of sedes){
+      const m = bySede.get(s);
+      const rowsOut = Array.from(m.entries()).map(([cond, cnt])=>{
+        const total = cnt.f + cnt.t;
+        return { sede:s, cond, falso:cnt.f, verdadero:cnt.t, total };
+      }).sort((a,b)=> b.total - a.total || a.cond.localeCompare(b.cond));
+
+      const subtotal = rowsOut.reduce((acc,r)=>{ acc.f+=r.falso; acc.t+=r.verdadero; acc.all+=r.total; return acc; }, {f:0,t:0,all:0});
+      blocks.push({ sede:s, rows:rowsOut, subtotal });
+    }
+
+    return { blocks, totals, missing:false };
+  }
+
+  function renderSedeCond(rows){
+    const body = document.getElementById("tblSedeCondBody");
+    const info = document.getElementById("scStatus");
+    if (!body) return;
+
+    if (!state.map.sede || !state.map.activo || !state.map.estatus){
+      body.innerHTML = "";
+      if (info) info.textContent = "Mapea “Sede”, “Estatus (true/false)” y “Campo Activo (opcional)” (COND) en la sección de Mapeo.";
+      return;
+    }
+
+    // Si hay selector local de sede, sincronizamos con el global
+    const localSedeSel  = document.getElementById("scSede");
+    const globalSedeSel = document.getElementById("filter_sede");
+    if (localSedeSel && globalSedeSel && (localSedeSel.value !== globalSedeSel.value)){
+      globalSedeSel.value = localSedeSel.value || "";
+    }
+
+    // 'rows' ya viene de applyBaseFilters() → respeta filtros globales
+    const p = pivotSedeCond(rows);
+
+    if (p.missing){
+      body.innerHTML = "";
+      if (info) info.textContent = "Faltan columnas mapeadas.";
+      return;
+    }
+
+    const selectedSede = (document.getElementById("filter_sede")||{}).value || "";
+    const fmt = n => n.toLocaleString("es-PE");
+    const html = [];
+
+    for (const b of p.blocks){
+      if (selectedSede && b.sede !== selectedSede) continue;
+
+      // Filas detalle (COND)
+      for (const r of b.rows){
+        html.push(`<tr>
+          <td style="text-align:left">${b.sede}</td>
+          <td style="text-align:left">${r.cond}</td>
+          <td style="text-align:right">${fmt(r.falso)}</td>
+          <td style="text-align:right">${fmt(r.verdadero)}</td>
+          <td style="text-align:right">${fmt(r.total)}</td>
+        </tr>`);
+      }
+      // Subtotal por sede
+      html.push(`<tr class="row-total">
+        <td style="text-align:left;font-weight:600">Total ${b.sede}</td>
+        <td></td>
+        <td style="text-align:right;font-weight:600">${fmt(b.subtotal.f)}</td>
+        <td style="text-align:right;font-weight:600">${fmt(b.subtotal.t)}</td>
+        <td style="text-align:right;font-weight:600">${fmt(b.subtotal.all)}</td>
+      </tr>`);
+    }
+
+    body.innerHTML = html.join("");
+
+    if (info) {
+      const sedeTxt = selectedSede || "todas las sedes";
+      info.textContent = `Mostrando ${sedeTxt}. Registros: ${fmt(p.totals.all)} (TRUE: ${fmt(p.totals.t)} | FALSE: ${fmt(p.totals.f)})`;
+    }
   }
 
   // ========= GRÁFICOS =========
@@ -364,6 +487,7 @@
     const sedeSel = document.getElementById("filter_sede");
     if (sedeSel){ sedeSel.innerHTML = `<option value="">Todas las sedes</option>` + sedeVals.map(v=>`<option value="${v}">${v}</option>`).join(""); }
     fillUltimoFilter();
+    fillScSede(); // ← llena el combo del cuadro SEDE→COND
 
     ['fcol1','fcol2','fcol3'].forEach(fillHeaderOptions);
     ['fcol1','fcol2','fcol3'].forEach((id,i)=>{ const vId='fval'+(i+1); fillValuesFor(id, vId); });
@@ -393,10 +517,12 @@
     renderPivotSede(rows);
     renderPivotUsuario(rows);
     renderChartSede(rows);
-    renderChartUsuario(rows); // <-- apilado por fecha
+    renderChartUsuario(rows);
+    // NUEVO → tabla SEDE → COND → VALIDACIÓN
+    renderSedeCond(rows);
   }
 
-  // ========= Carga de archivo (sigue siendo solo Admin; útil para pruebas locales) =========
+  // ========= Carga de archivo (solo Admin; útil para pruebas locales) =========
   async function onFileChange(e){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -414,9 +540,8 @@
     } finally { try{ e.target.value = ""; }catch(_){ } }
   }
 
-  // ========= NUEVO: Descarga central del archivo del servidor =========
+  // ========= Descarga central del archivo del servidor =========
   async function fetchCentralData(url){
-    // evita caché del navegador
     const sep = url.includes("?") ? "&" : "?";
     const fullUrl = `${url}${sep}cb=${Date.now()}`;
     const res = await fetch(fullUrl, { cache: "no-store" });
@@ -476,13 +601,64 @@
       fileInput.addEventListener("change", onFileChange);
     }
 
+    // Filtros globales existentes
     ["filter_sede","filter_ultimo","filter_from","filter_to","agg","onlyTrue","fval1","fval2","fval3",
      "opt_sort","opt_top","opt_percent","opt_user_top","opt_user_dates"].forEach(id=>{
       const el=document.getElementById(id);
       if(el) el.addEventListener("change", ()=>{ updateKPIs(); renderAll(); });
     });
+
+    // Guardar mapeo
     const saveBtn=document.getElementById("savePrefs");
     if (saveBtn) saveBtn.addEventListener("click", onSavePrefs);
+
+    // ===== NUEVO: Controles del cuadro SEDE → COND =====
+    fillScSede(); // llena el combo "scSede" si ya hay datos
+
+    // eventos de los controles locales
+    const scSede   = document.getElementById("scSede");
+    const scSearch = document.getElementById("scSearch");
+    if (scSede)   scSede.addEventListener("change", ()=> { renderAll(); });
+    if (scSearch) scSearch.addEventListener("input",  ()=> { renderAll(); });
+
+    // sincronía con el filtro global de sede
+    const globalSedeSel = document.getElementById("filter_sede");
+    if (globalSedeSel){
+      globalSedeSel.addEventListener("change", ()=>{
+        const sel = document.getElementById("scSede");
+        if (sel) sel.value = globalSedeSel.value || "";
+        renderAll();
+      });
+    }
+
+    // exportación del cuadro
+    const scExport = document.getElementById("scExport");
+    if (scExport){
+      scExport.addEventListener("click", ()=>{
+        const rows = applyBaseFilters(state.rows);
+        const p = pivotSedeCond(rows);
+        const flat = [];
+        for (const b of p.blocks){
+          for (const r of b.rows){
+            flat.push({
+              "SEDE": b.sede,
+              "COND": r.cond,
+              "FALSO": r.falso,
+              "VERDADERO": r.verdadero,
+              "Total general": r.total
+            });
+          }
+          flat.push({
+            "SEDE": `Total ${b.sede}`,
+            "COND": "",
+            "FALSO": b.subtotal.f,
+            "VERDADERO": b.subtotal.t,
+            "Total general": b.subtotal.all
+          });
+        }
+        exportCSV(flat, "sede_cond_validacion.csv");
+      });
+    }
 
     // ========= 1) Intentar cargar SIEMPRE desde el archivo central del servidor =========
     let usedCentral = false;

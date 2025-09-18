@@ -91,3 +91,38 @@ canvas{max-width:100%}
 .header p{
   color:#dbe4f3; /* blanco humo suave */
 }
+/* Cabecera del card con controles que se acomodan */
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+}
+.card-head h3 { margin: 0; }
+
+/* Controles */
+.card-head .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Tabla responsive con scroll horizontal suave en móvil */
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Tabla compacta y legible */
+.table-compact th, .table-compact td {
+  padding: 8px 10px; white-space: nowrap; font-size: 14px;
+}
+
+/* Cabecera pegajosa al hacer scroll */
+.table-compact thead th {
+  position: sticky; top: 0; background: var(--surface, #fff);
+  z-index: 1; box-shadow: 0 1px 0 rgba(0,0,0,.06);
+}
+
+/* La columna COND puede ser larga: permite salto de línea */
+#tblSedeCond td:nth-child(2) {
+  white-space: normal; max-width: 360px;
+}
+
+/* Ajustes en pantallas pequeñas */
+@media (max-width: 640px) {
+  .card-head h3 { font-size: 16px; flex: 0 0 100%; }
+  .table-compact th, .table-compact td { padding: 6px 8px; font-size: 13px; }
+  #tblSedeCond td:nth-child(2) { max-width: 220px; }
+}

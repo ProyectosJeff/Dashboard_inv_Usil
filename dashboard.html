@@ -158,7 +158,41 @@
       </div>
     </section>
   </main>
+<!-- ============ SEDE → COND — VALIDACIÓN (TRUE/FALSE) ============ -->
+<section class="card" style="margin-top:20px">
+  <div class="card-head" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+    <h3 style="margin:0">SEDE → COND(UBICACION) — VALIDACIÓN (TRUE/FALSE)</h3>
 
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <label class="small">Sede</label>
+      <select id="scSede" style="min-width:240px"></select>
+
+      <label class="small">Buscar COND</label>
+      <input id="scSearch" class="input" placeholder="Filtrar por COND…" style="width:220px" />
+
+      <button id="scExport" class="btn btn-secondary">Exportar tabla (CSV)</button>
+    </div>
+  </div>
+
+  <div class="card-body" style="overflow:auto">
+    <table class="table" id="tblSedeCond" style="min-width:720px">
+      <thead>
+        <tr>
+          <th style="text-align:left; width:260px">SEDE</th>
+          <th style="text-align:left; width:260px">COND</th>
+          <th style="text-align:right">FALSO</th>
+          <th style="text-align:right">VERDADERO</th>
+          <th style="text-align:right">Total general</th>
+        </tr>
+      </thead>
+      <tbody id="tblSedeCondBody"></tbody>
+    </table>
+    <div id="scStatus" class="small" style="margin-top:6px;color:#666"></div>
+  </div>
+</section>
+<!-- ============ /SEDE → COND ============ -->
+
+  
   <footer class="footer">Elaborado por <strong>Tecdein EIRL</strong> © 2025</footer>
 
   <!-- Libs -->
