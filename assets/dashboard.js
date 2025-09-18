@@ -9,6 +9,12 @@
     requireLogin, getCurrentUser
   } = C;
 
+  // ====== RUTA DEL ARCHIVO CENTRAL (ajústala a donde lo subas en tu repo) ======
+  // Ejemplos:
+  //   const CENTRAL_DATA_URL = "./DATA_GENERAL_1.csv";
+  //   const CENTRAL_DATA_URL = "./data/DATA_GENERAL_1.csv";
+  const CENTRAL_DATA_URL = "./DATA_GENERAL_1.xlsx";
+
   try { if (window.ChartDataLabels) { Chart.register(window.ChartDataLabels); } } catch (e) {}
 
   const state = {
@@ -60,7 +66,7 @@
   function updateKPIs(){
     const total = state.rows.length;
     const sedeCol = state.map.sede;
-    const ultimoCol = state.map.ultimo;
+       const ultimoCol = state.map.ultimo;
     const dateCol = state.map.fecha;
 
     const elTotal = document.getElementById("kpiTotal");
@@ -197,7 +203,6 @@
   }
 
   // ========= GRÁFICOS =========
-  // SEDE apilado (con opción 100%)
   function renderChartSede(rows){
     const ctx = document.getElementById("chartSedePro");
     if (!ctx) return;
@@ -247,7 +252,6 @@
     });
   }
 
-  // ==== ULTIMO_USUARIO — BARRAS APILADAS (X = usuarios, datasets = fechas) ====
   function getUserDateCube(rows){
     const selUlt = (document.getElementById("filter_ultimo")||{}).value || "";
     const agg    = (document.getElementById("agg")||{}).value || "day";
@@ -392,7 +396,7 @@
     renderChartUsuario(rows); // <-- apilado por fecha
   }
 
-  // ========= Carga de archivo =========
+  // ========= Carga de archivo (sigue siendo solo Admin; útil para pruebas locales) =========
   async function onFileChange(e){
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -410,6 +414,43 @@
     } finally { try{ e.target.value = ""; }catch(_){ } }
   }
 
+  // ========= NUEVO: Descarga central del archivo del servidor =========
+  async function fetchCentralData(url){
+    // evita caché del navegador
+    const sep = url.includes("?") ? "&" : "?";
+    const fullUrl = `${url}${sep}cb=${Date.now()}`;
+    const res = await fetch(fullUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error("No se pudo descargar el archivo central: " + res.status);
+
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    const lower = url.toLowerCase();
+
+    // JSON
+    if (ct.includes("json") || lower.endsWith(".json")){
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("El JSON debe ser un array de objetos");
+      return data;
+    }
+
+    // XLS/XLSX
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xls")){
+      const buf = await res.arrayBuffer();
+      if (typeof XLSX === "undefined") throw new Error("Falta XLSX en la página");
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      return XLSX.utils.sheet_to_json(ws, { defval: "" });
+    }
+
+    // CSV
+    const txt = await res.text();
+    if (typeof Papa === "undefined") throw new Error("Falta PapaParse en la página");
+    return await new Promise((resolve, reject)=>{
+      Papa.parse(txt, { header:true, skipEmptyLines:true,
+        complete: r => resolve(r.data), error: err => reject(err)
+      });
+    });
+  }
+
   // ========= Init =========
   document.addEventListener("DOMContentLoaded", async ()=>{
     requireLogin && requireLogin();
@@ -420,7 +461,7 @@
 
     const isAdmin = state.role === "admin";
 
-    // Mostrar/ocultar controles de Admin
+    // Mostrar/ocultar controles de Admin (carga/export/borrar)
     const idsAdmin = ["uploadLabel","exportAll","clearData","expSede","expUsuario"];
     idsAdmin.forEach(id=>{
       const el = document.getElementById(id);
@@ -429,14 +470,12 @@
       else { el.style.display=""; el.disabled = false; }
     });
 
-    // Carga archivo
     const fileInput = document.getElementById("fileInput");
     if (fileInput){
       if (!isAdmin) fileInput.disabled = true;
       fileInput.addEventListener("change", onFileChange);
     }
 
-    // Listeners comunes (filtros/mapeo)
     ["filter_sede","filter_ultimo","filter_from","filter_to","agg","onlyTrue","fval1","fval2","fval3",
      "opt_sort","opt_top","opt_percent","opt_user_top","opt_user_dates"].forEach(id=>{
       const el=document.getElementById(id);
@@ -445,42 +484,36 @@
     const saveBtn=document.getElementById("savePrefs");
     if (saveBtn) saveBtn.addEventListener("click", onSavePrefs);
 
-    // Exportar/Borrar SOLO admin
-    if (isAdmin){
-      const clr=document.getElementById("clearData");
-      if (clr) clr.addEventListener("click", ()=>{ clearRows().then(()=>location.reload()); });
-
-      const exp=document.getElementById("exportAll");
-      if (exp) exp.addEventListener("click", async ()=>{
-        const rows = state.rows?.length? state.rows : await loadRows();
-        exportCSV(rows,"datos_completos.csv");
-      });
-
-      const expSede = document.getElementById("expSede");
-      if (expSede) expSede.addEventListener("click", ()=>{
-        const rows = applyBaseFilters(state.rows);
-        const p = pivotSedeResumen(rows).rows;
-        exportCSV(p, "resumen_sede.csv");
-      });
-
-      const expUsuario = document.getElementById("expUsuario");
-      if (expUsuario) expUsuario.addEventListener("click", ()=>{
-        const rows = applyBaseFilters(state.rows);
-        const blocks = pivotUsuarioDetalle(rows);
-        const flat = [];
-        for (const b of blocks) for (const r of b.rows) flat.push({ultimo_usuario:b.user, SEDE:r.sede, FECHA:r.fecha, Total:r.total});
-        exportCSV(flat, "avance_ultimo_usuario.csv");
-      });
+    // ========= 1) Intentar cargar SIEMPRE desde el archivo central del servidor =========
+    let usedCentral = false;
+    try{
+      setStatus(document.getElementById("status"), "Cargando datos del servidor…");
+      const rows = await fetchCentralData(CENTRAL_DATA_URL);
+      if (rows && rows.length){
+        state.rows = rows; state.headers = Object.keys(rows[0] || {});
+        await saveRows(rows); // guarda local para navegación entre páginas/offline
+        fillMappingUI(); updateKPIs(); renderAll();
+        setStatus(document.getElementById("status"), `Datos del servidor listos (${rows.length} filas).`);
+        usedCentral = true;
+      }
+    }catch(err){
+      console.warn("No se pudo cargar del servidor:", err);
     }
 
-    // Cargar datos persistidos
-    const stored = await loadRows();
-    if (stored && stored.length){
-      state.rows = stored; state.headers = Object.keys(stored[0] || {});
-      fillMappingUI(); updateKPIs(); renderAll();
-      setStatus(document.getElementById("status"), `Usando datos guardados del navegador (${stored.length} filas).`);
-    } else {
-      setStatus(document.getElementById("status"), isAdmin ? "Sin datos. Carga un CSV o Excel (solo Admin)." : "Sin datos cargados.");
+    // ========= 2) Si central falló, intenta con datos locales persistidos =========
+    if (!usedCentral){
+      const stored = await loadRows();
+      if (stored && stored.length){
+        state.rows = stored; state.headers = Object.keys(stored[0] || {});
+        fillMappingUI(); updateKPIs(); renderAll();
+        setStatus(document.getElementById("status"), `Usando datos guardados (${stored.length} filas).`);
+      } else {
+        setStatus(document.getElementById("status"),
+          (isAdmin ? "Sin datos. Reemplaza el archivo central en el servidor o carga un CSV/Excel (solo Admin)."
+                   : "Sin datos. Intenta más tarde; el archivo central aún no está disponible."),
+          true
+        );
+      }
     }
   });
 })();
