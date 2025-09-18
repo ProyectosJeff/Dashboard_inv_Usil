@@ -1,3 +1,13 @@
+const LEGACY_SESSION_KEYS = [
+  'dash_current_user_v2',
+  'dash_current_user',
+  'currentUser',
+  'loggedUser',
+  'user'
+];
+function purgeLegacySessions(){ try{ LEGACY_SESSION_KEYS.forEach(k => localStorage.removeItem(k)); }catch(_){ } }
+purgeLegacySessions();
+
 // assets/auth.js
 (() => {
   const LS_USERS_LIST   = "dash_users_v3";       // lista de usuarios
