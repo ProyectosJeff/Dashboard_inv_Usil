@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard — Excel/CSV</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+<header class="header">
+  <h1>Dashboard — resultados de toma de inventario USIL</h1>
+  <p>Bienvenido <strong id="helloUser"></strong>. Fondo degradado azul → blanco humo, diseño responsive.</p>
+  <nav class="nav">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="users.html">Usuarios</a>
+    <a href="index.html">Salir</a>
+  </nav>
+</header>
+
+  <main class="container">
+    <section class="card">
+      <div class="controls">
+        <label id="uploadLabel" class="btn ghost" for="fileInput">Cargar CSV/XLSX (solo Admin)</label>
+        <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" style="display:none" />
+        <button id="exportAll" class="btn">Exportar TODO (CSV)</button>
+        <button id="clearData" class="btn ghost">Borrar datos guardados</button>
+        <span id="status" class="status"></span>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Mapeo de columnas</h3>
+          <div class="controls" style="align-items:flex-end">
+            <div><label>Sede</label><br/><select id="map_sede" class="input"></select></div>
+            <div><label>Estatus (true/false)</label><br/><select id="map_estatus" class="input"></select></div>
+            <div><label>Fecha</label><br/><select id="map_fecha" class="input"></select></div>
+            <div><label>Último usuario</label><br/><select id="map_ultimo" class="input"></select></div>
+            <div><label>Campo Activo (opcional)</label><br/><select id="map_activo" class="input"></select></div>
+          </div>
+          <div class="controls">
+            <div><label>Valor textual que cuenta como “Validado” (solo si no es booleano)</label><br/>
+              <input id="map_validado" class="input" placeholder="Validado / Conforme" value="Validado"/>
+            </div>
+            <button id="savePrefs" class="btn">Actualizar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Filtros</h3>
+          <div class="controls">
+            <div><label>Filtrar por sede</label><br/><select id="filter_sede" class="input"><option value="">Todas las sedes</option></select></div>
+            <div><label>Último usuario</label><br/><select id="filter_ultimo" class="input"><option value="">(Todos)</option></select></div>
+            <div><label>Desde</label><br/><input id="filter_from" type="date" class="input" /></div>
+            <div><label>Hasta</label><br/><input id="filter_to" type="date" class="input" /></div>
+            <div><label>Agrupar</label><br/>
+              <select id="agg" class="input">
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px"><input id="onlyTrue" type="checkbox" checked /> Solo VALIDACION=true</div>
+          </div>
+
+          <div class="controls">
+            <div><label>Filtro A (columna)</label><br/><select id="fcol1" class="input"></select></div>
+            <div><label>Valor</label><br/><select id="fval1" class="input"><option value="">(Todos)</option></select></div>
+            <div><label>Filtro B (columna)</label><br/><select id="fcol2" class="input"></select></div>
+            <div><label>Valor</label><br/><select id="fval2" class="input"><option value="">(Todos)</option></select></div>
+            <div><label>Filtro C (columna)</label><br/><select id="fcol3" class="input"></select></div>
+            <div><label>Valor</label><br/><select id="fval3" class="input"><option value="">(Todos)</option></select></div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi"><div class="lbl">Registros</div><div id="kpiTotal" class="val">—</div></div>
+            <div class="kpi"><div class="lbl">Sedes</div><div id="kpiSedes" class="val">—</div></div>
+            <div class="kpi"><div class="lbl">Últimos usuarios</div><div id="kpiUsers" class="val">—</div></div>
+            <div class="kpi"><div class="lbl">Rango fechas</div><div id="kpiRange" class="val">—</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL 1 — SEDE -->
+    <section class="grid">
+      <div class="card" style="grid-column:1/-1">
+        <div class="flex-between">
+          <h3>SEDE — TRUE/FALSE (Top N, orden y % 100)</h3>
+          <div class="controls slim">
+            <label>Orden</label>
+            <select id="opt_sort" class="input">
+              <option value="total">Total</option>
+              <option value="true">TRUE</option>
+              <option value="false">FALSE</option>
+              <option value="sede">A–Z</option>
+            </select>
+            <label>Top</label><input id="opt_top" class="input" type="number" min="5" max="100" value="20" />
+            <label class="switch"><input id="opt_percent" type="checkbox" /> 100%</label>
+          </div>
+        </div>
+        <canvas id="chartSedePro" height="340"></canvas>
+
+        <div class="flex-between" style="margin-top:10px">
+          <h4 style="margin:0">Tabla — Resumen por SEDE</h4>
+          <button id="expSede" class="btn ghost">Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="pivot" id="tblSedeResumen">
+            <thead>
+              <tr><th>SEDE</th><th>FALSO</th><th>VERDADERO</th><th>Total general</th></tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot>
+              <tr>
+                <th>Total general</th>
+                <th id="sumFalso">0</th>
+                <th id="sumVerd">0</th>
+                <th id="sumTotal">0</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL 2 — ULTIMO_USUARIO (3 vistas) -->
+    <section class="grid">
+      <div class="card" style="grid-column:1/-1">
+        <div class="flex-between">
+          <h3>ULTIMO_USUARIO — avance por fecha (solo TRUE)</h3>
+          <div class="controls slim">
+            <label>Vista</label>
+            <select id="userChartMode" class="input">
+              <option value="heat">Mapa de calor (recomendado)</option>
+              <option value="bars">Barras agrupadas</option>
+              <option value="lines">Líneas</option>
+            </select>
+            <label>Top usuarios</label>
+            <input id="opt_user_top" class="input" type="number" min="3" max="20" value="10" />
+            <label>Últimas fechas</label>
+            <input id="opt_user_dates" class="input" type="number" min="3" max="30" value="10" />
+          </div>
+        </div>
+        <canvas id="chartUsuarioPro" height="420"></canvas>
+
+        <div class="flex-between" style="margin-top:10px">
+          <h4 style="margin:0">Tabla — Avance por ULTIMO_USUARIO</h4>
+          <button id="expUsuario" class="btn ghost">Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="pivot" id="tblUsuarioDetalle">
+            <thead>
+              <tr><th>ultimo_usuario</th><th>SEDE</th><th>FECHA</th><th>Total</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">Elaborado por <strong>Tecdein EIRL</strong> © 2025</footer>
+
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <script>dayjs.extend(dayjs_plugin_customParseFormat);</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <!-- Heatmap (matrix) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <script src="assets/common.js"></script>
+  <script src="assets/dashboard.js"></script>
+</body>
+</html>

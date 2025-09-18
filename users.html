@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Usuarios — Admin</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Gestión de usuarios (Admin)</h1>
+    <nav class="nav">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="users.html">Usuarios</a>
+      <a href="index.html">Salir</a>
+    </nav>
+  </header>
+  <main class="container">
+    <section class="card">
+      <h3>Agregar usuario</h3>
+      <form id="addForm" class="controls">
+        <input class="input" name="username" placeholder="usuario" required />
+        <select class="input" name="role">
+          <option value="usuario">usuario</option>
+          <option value="admin">admin</option>
+        </select>
+        <input class="input" type="password" name="password" placeholder="contraseña" required />
+        <input class="input" type="password" name="confirm" placeholder="confirmar" required />
+        <button class="btn" type="submit">Agregar</button>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Lista</h3>
+      <div class="table-wrap">
+        <table class="user-list">
+          <thead><tr><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+          <tbody id="userBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <footer class="footer">Solo administradores pueden acceder a esta página.</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <script>dayjs.extend(dayjs_plugin_customParseFormat);</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="assets/common.js"></script>
+  <script src="assets/users.js"></script>
+</body>
+</html>
+
+

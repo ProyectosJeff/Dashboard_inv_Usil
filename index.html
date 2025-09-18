@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ingreso — Dashboard</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="neo-card">
+      <div class="badge"><span class="dot"></span> Acceso</div>
+      <h2>Dashboard</h2>
+      <p>Inicia sesión para continuar. <span class="small">El primer usuario creado será <strong>ADMIN</strong>.</span></p>
+
+      <div id="login-card">
+        <form id="login-form">
+          <div class="form-row"><label>Usuario</label><input name="username" required placeholder="tu_usuario" /></div>
+          <div class="form-row"><label>Contraseña</label><input name="password" type="password" required placeholder="••••••••" /></div>
+          <div class="actions"><button class="btn" type="submit">Ingresar</button><a id="to-register" class="link" href="#">Crear usuario</a></div>
+          <div id="login-msg" class="status small"></div>
+        </form>
+      </div>
+
+      <div id="register-card" style="display:none">
+        <div class="small" style="margin-bottom:8px">Primer usuario = <strong>admin</strong>. Siguientes = <strong>usuario</strong>.</div>
+        <form id="register-form">
+          <div class="form-row"><label>Usuario</label><input name="username" required placeholder="nuevo_usuario" /></div>
+          <div class="form-row"><label>Contraseña</label><input name="password" type="password" required /></div>
+          <div class="form-row"><label>Confirmar contraseña</label><input name="confirm" type="password" required /></div>
+          <div class="actions"><button class="btn" type="submit">Crear</button><a id="to-login" class="link" href="#">Volver a Ingresar</a></div>
+          <div id="register-msg" class="status small"></div>
+        </form>
+      </div>
+
+      <div class="actions" style="margin-top:16px;justify-content:flex-start">
+        <a class="link small" href="dashboard.html">Dashboard</a>
+        <a class="link small" href="users.html">Usuarios (Admin)</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <script>dayjs.extend(dayjs_plugin_customParseFormat);</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="assets/common.js"></script>
+  <script src="assets/auth.js"></script>
+  <footer class="footer">Elaborado por <strong>TECDEIN EIRL</strong> &nbsp;© 2025</footer>
+
+</body>
+</html>
