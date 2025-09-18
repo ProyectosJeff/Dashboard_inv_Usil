@@ -1,183 +1,159 @@
 // assets/auth.js
 (() => {
-  // ====== Config ======
-  const LS_USERS   = "dash_users_v2";
-  const LS_CURRENT = "dash_current_user_v2";
+  const LS_USERS_LIST   = "dash_users_v3";       // lista de usuarios
+  const LS_CURRENT_USER = "dash_current_user_v3"; // sesión
 
-  // Cambia esta lista a tus usuarios iniciales (se crean la PRIMERA vez en cada dominio)
-  const DEFAULT_USERS = [
-    { username: "admin",   password: "Admin123*",   role: "admin"   },
-    { username: "visor1",  password: "Visor123*",   role: "usuario" },
-    // { username: "juan", password: "TuClave!", role: "usuario" },
-  ];
+  // Admin por defecto: se crea SOLO si no hay usuarios.
+  const DEFAULT_ADMIN = { username: "admin", password: "Admin123*", role: "admin" };
+  const FALLBACK_USER = { username: "visor1", password: "Visor123*", role: "usuario" };
 
-  // ====== Utils ======
-  const toHex = (buf) => Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, "0")).join("");
-
-  async function sha256(text) {
-    const enc = new TextEncoder().encode(text);
-    const hash = await crypto.subtle.digest("SHA-256", enc);
-    return toHex(hash);
+  // ===== utilidades =====
+  const toHex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  async function sha256(text){
+    const enc = new TextEncoder().encode(text ?? "");
+    const out = await crypto.subtle.digest("SHA-256", enc);
+    return toHex(out);
   }
 
-  function getUsersRaw() {
-    try { return JSON.parse(localStorage.getItem(LS_USERS) || "[]"); }
-    catch { return []; }
-  }
-  function saveUsersRaw(users) {
-    localStorage.setItem(LS_USERS, JSON.stringify(users || []));
-  }
-
-  async function ensureSeeded() {
-    let users = getUsersRaw();
-    if (Array.isArray(users) && users.length > 0) return; // ya hay usuarios
-
-    // Sembrar por primera vez
-    const seeded = [];
-    for (const u of DEFAULT_USERS) {
-      const passHash = await sha256(u.password);
-      seeded.push({ username: u.username, passHash, role: u.role || "usuario" });
+  function readUsersRaw() {
+    // lee v3, o migra v2/v1 si existieran
+    const keys = [LS_USERS_LIST, "dash_users_v2", "dash_users"];
+    for (const k of keys){
+      try {
+        const val = localStorage.getItem(k);
+        if (!val) continue;
+        const arr = JSON.parse(val);
+        if (Array.isArray(arr)) return arr;
+      } catch {}
     }
-    saveUsersRaw(seeded);
+    return [];
+  }
+  function writeUsersRaw(list){ localStorage.setItem(LS_USERS_LIST, JSON.stringify(list||[])); }
+
+  function getCurrentUser(){ try{ return JSON.parse(localStorage.getItem(LS_CURRENT_USER)||"null"); }catch{ return null; } }
+  function setCurrentUser(u){ if(!u) localStorage.removeItem(LS_CURRENT_USER); else localStorage.setItem(LS_CURRENT_USER, JSON.stringify(u)); }
+
+  async function ensureSeeded(){
+    let list = readUsersRaw();
+    if (!Array.isArray(list) || list.length === 0){
+      // primera vez: admin + un visor
+      const adminHash = await sha256(DEFAULT_ADMIN.password);
+      const visorHash = await sha256(FALLBACK_USER.password);
+      list = [
+        { username: DEFAULT_ADMIN.username, passHash: adminHash, role: DEFAULT_ADMIN.role },
+        { username: FALLBACK_USER.username, passHash: visorHash, role: FALLBACK_USER.role }
+      ];
+      writeUsersRaw(list);
+      return;
+    }
+    // si no hay ningún admin en la lista, añadimos uno para que puedas entrar
+    const hasAdmin = list.some(u => (u.role||"").toLowerCase()==="admin");
+    const hasUserAdminName = list.some(u => u.username?.toLowerCase()==="admin");
+    if (!hasAdmin && !hasUserAdminName){
+      const adminHash = await sha256(DEFAULT_ADMIN.password);
+      list.push({ username: DEFAULT_ADMIN.username, passHash: adminHash, role: "admin" });
+      writeUsersRaw(list);
+    }
   }
 
-  function loadUsers() { return getUsersRaw(); }
-  function saveUsers(users) { saveUsersRaw(users); }
-
-  function getCurrentUser() {
-    try { return JSON.parse(localStorage.getItem(LS_CURRENT) || "null"); }
-    catch { return null; }
-  }
-  function setCurrentUser(u) {
-    if (!u) localStorage.removeItem(LS_CURRENT);
-    else localStorage.setItem(LS_CURRENT, JSON.stringify({ username:u.username, role:u.role }));
-  }
-
-  function requireLogin() {
-    const u = getCurrentUser();
-    // Permitir index.html sin login
-    const onIndex = /(^|\/)index\.html?(\?|#|$)/i.test(location.pathname) || location.pathname === "/" || location.pathname === "";
-    if (!u && !onIndex) location.href = "index.html";
-  }
-
-  function logout() { setCurrentUser(null); location.href = "index.html"; }
-
-  // ====== Operaciones auth ======
-  async function login(username, password) {
-    username = (username || "").trim();
-    const users = loadUsers();
-    const u = users.find(x => x.username.toLowerCase() === username.toLowerCase());
+  // ===== operaciones de auth =====
+  async function login(username, password){
+    username = (username||"").trim();
+    const list = readUsersRaw();
+    const u = list.find(x => x.username?.toLowerCase() === username.toLowerCase());
     if (!u) throw new Error("Usuario o contraseña incorrectos");
-    const passHash = await sha256(password || "");
-    if (passHash !== u.passHash) throw new Error("Usuario o contraseña incorrectos");
+    const h = await sha256(password||"");
+    if (h !== u.passHash) throw new Error("Usuario o contraseña incorrectos");
     setCurrentUser({ username: u.username, role: u.role });
     return { username: u.username, role: u.role };
   }
 
-  async function createUser({ username, password, role = "usuario" }) {
-    username = (username || "").trim();
-    if (!username || !password) throw new Error("Completa usuario y contraseña");
-    const current = getCurrentUser();
-    const existing = loadUsers();
+  function requireLogin(){
+    const u = getCurrentUser();
+    const path = (location.pathname||"").toLowerCase();
+    const onIndex = /(^|\/)index\.html?(\?|#|$)/.test(path) || path === "/" || path === "";
+    if (!u && !onIndex) location.href = "index.html";
+  }
+  function logout(){ setCurrentUser(null); location.href = "index.html"; }
 
-    // Si ya hay usuarios, sólo Admin puede crear nuevos
-    if (existing.length > 0 && (!current || current.role !== "admin")) {
+  function loadUsers(){ return readUsersRaw(); }
+  function saveUsers(list){ writeUsersRaw(list); }
+
+  async function createUser({username,password,role="usuario"}){
+    username = (username||"").trim();
+    if (!username || !password) throw new Error("Completa usuario y contraseña");
+    const cur = getCurrentUser();
+    const list = readUsersRaw();
+    if (list.length>0 && (!cur || (cur.role||"").toLowerCase()!=="admin"))
       throw new Error("Sólo Admin puede crear usuarios");
-    }
-    if (existing.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+    if (list.some(u => u.username?.toLowerCase()===username.toLowerCase()))
       throw new Error("El usuario ya existe");
-    }
     const passHash = await sha256(password);
-    existing.push({ username, passHash, role });
-    saveUsers(existing);
+    list.push({ username, passHash, role });
+    writeUsersRaw(list);
     return true;
   }
 
-  function deleteUser(username) {
-    const current = getCurrentUser();
-    if (!current || current.role !== "admin") throw new Error("Sólo Admin puede eliminar usuarios");
-    const list = loadUsers().filter(u => u.username.toLowerCase() !== username.toLowerCase());
-    saveUsers(list);
+  async function setPassword(username, newPassword){
+    const list = readUsersRaw();
+    const i = list.findIndex(u => u.username?.toLowerCase()===String(username).toLowerCase());
+    if (i<0) throw new Error("Usuario no encontrado");
+    list[i].passHash = await sha256(newPassword);
+    writeUsersRaw(list);
+  }
+  function setRole(username, role){
+    const list = readUsersRaw();
+    const i = list.findIndex(u => u.username?.toLowerCase()===String(username).toLowerCase());
+    if (i<0) throw new Error("Usuario no encontrado");
+    list[i].role = role;
+    writeUsersRaw(list);
+  }
+  function deleteUser(username){
+    const list = readUsersRaw();
+    const idx = list.findIndex(u => u.username?.toLowerCase()===String(username).toLowerCase());
+    if (idx<0) return;
+    const admins = list.filter(u => (u.role||"").toLowerCase()==="admin").length;
+    if (admins<=1 && (list[idx].role||"").toLowerCase()==="admin")
+      throw new Error("No puedes eliminar al único admin.");
+    list.splice(idx,1);
+    writeUsersRaw(list);
   }
 
-  // ====== UI (index.html) ======
-  async function wireIndexUI() {
-    // Si no estamos en index.html, no hacemos nada
+  // ===== auto-wire en el login (sin tocar tu diseño) =====
+  document.addEventListener("DOMContentLoaded", async ()=>{
+    // Solo si estamos en la página de login (tiene el formulario)
     const loginForm = document.getElementById("login-form");
     if (!loginForm) return;
 
-    await ensureSeeded(); // importante: crear semilla si no existe
+    await ensureSeeded();
 
-    const registerForm = document.getElementById("register-form");
-    const toRegister   = document.getElementById("to-register");
-    const toLogin      = document.getElementById("to-login");
-    const loginCard    = document.getElementById("login-card");
-    const registerCard = document.getElementById("register-card");
-    const resetUsers   = document.getElementById("resetUsers");
     const loginMsg     = document.getElementById("login-msg");
-    const registerMsg  = document.getElementById("register-msg");
+    const registerCard = document.getElementById("register-card");
+    const toRegister   = document.getElementById("to-register");
 
-    const usersExist = loadUsers().length > 0;
+    // Oculta cualquier UI de registro (como pediste: no debe pedir crear usuario)
+    if (toRegister)   toRegister.style.display = "none";
+    if (registerCard) registerCard.style.display = "none";
 
-    // Ocultar "Crear usuario" si ya hay usuarios sembrados
-    if (toRegister && usersExist) toRegister.style.display = "none";
-    if (registerCard && usersExist) registerCard.style.display = "none";
-    if (resetUsers) resetUsers.style.display = "none"; // no exponer reset en público
-
-    // Toggle (por si no hay usuarios y quieres crear el primero)
-    if (toRegister) toRegister.addEventListener("click", (e)=>{ e.preventDefault(); loginCard.style.display="none"; registerCard.style.display="block"; });
-    if (toLogin)    toLogin.addEventListener("click",    (e)=>{ e.preventDefault(); registerCard.style.display="none"; loginCard.style.display="block"; });
-
-    // Login
     loginForm.addEventListener("submit", async (e)=>{
       e.preventDefault();
-      loginMsg.textContent = "";
-      const data = new FormData(loginForm);
-      const username = data.get("username");
-      const password = data.get("password");
+      if (loginMsg){ loginMsg.textContent=""; loginMsg.classList.remove("error"); }
+      const f = new FormData(loginForm);
       try{
-        const u = await login(username, password);
-        loginMsg.textContent = "Ingreso correcto…";
-        setTimeout(()=> location.href = "dashboard.html", 250);
+        await login(f.get("username"), f.get("password"));
+        if (loginMsg) loginMsg.textContent = "Ingreso correcto…";
+        setTimeout(()=> location.href="dashboard.html", 200);
       }catch(err){
-        loginMsg.textContent = err.message || "No se pudo iniciar sesión";
-        loginMsg.classList.add("error");
+        if (loginMsg){ loginMsg.textContent = err.message || "No se pudo iniciar sesión"; loginMsg.classList.add("error"); }
       }
     });
-
-    // Crear usuario (solo si NO hay usuarios; de lo contrario, sólo Admin desde users.html)
-    if (registerForm){
-      registerForm.addEventListener("submit", async (e)=>{
-        e.preventDefault();
-        registerMsg.textContent = "";
-        const data = new FormData(registerForm);
-        const username = data.get("username");
-        const password = data.get("password");
-        const confirm  = data.get("confirm");
-        if (password !== confirm){
-          registerMsg.textContent = "Las contraseñas no coinciden";
-          registerMsg.classList.add("error"); return;
-        }
-        try{
-          await createUser({ username, password, role: (loadUsers().length===0 ? "admin" : "usuario") });
-          registerMsg.textContent = "Usuario creado. Ahora ingresa.";
-          loginCard.style.display="block"; registerCard.style.display="none";
-        }catch(err){
-          registerMsg.textContent = err.message || "No se pudo crear el usuario";
-          registerMsg.classList.add("error");
-        }
-      });
-    }
-  }
-
-  // ====== Exponer API a otros módulos ======
-  window.Common = window.Common || {};
-  Object.assign(window.Common, {
-    loadUsers, saveUsers, createUser, deleteUser,
-    getCurrentUser, setCurrentUser, requireLogin, logout
   });
 
-  // Auto-wire en cualquier página
-  document.addEventListener("DOMContentLoaded", wireIndexUI);
+  // Exponer API usada por tus otras páginas
+  window.Common = window.Common || {};
+  Object.assign(window.Common,{
+    // sesión y guardado
+    getCurrentUser, setCurrentUser, requireLogin, logout,
+    loadUsers, saveUsers, createUser, setPassword, setRole, deleteUser
+  });
 })();

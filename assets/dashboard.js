@@ -31,8 +31,9 @@
   function inRange(dateObj, fromISO, toISO){
     if (!dateObj) return false;
     let ok = true;
-    if (fromISO){ ok = ok && (dayjs(dateObj).isSame(fromISO) || dayjs(dateObj).isAfter(fromISO)); }
-    if (toISO){ ok = ok && (dayjs(dateObj).isSame(toISO) || dayjs(dateObj).isBefore(toISO)); }
+    const d = dayjs(dateObj);
+    if (fromISO){ ok = ok && (d.isSame(fromISO) || d.isAfter(fromISO)); }
+    if (toISO){ ok = ok && (d.isSame(toISO) || d.isBefore(toISO)); }
     return ok;
   }
   function bucketKey(dateObj, agg){
@@ -414,43 +415,72 @@
     requireLogin && requireLogin();
     const current = getCurrentUser ? getCurrentUser() : null;
     state.role = (current && current.role) ? current.role : "usuario";
-    const hello = document.getElementById("helloUser"); if (hello) hello.textContent = `${current ? current.username : ""} (${state.role})`;
+    const hello = document.getElementById("helloUser");
+    if (hello) hello.textContent = `${current ? current.username : ""} (${state.role})`;
 
-    const uploadLabel = document.getElementById("uploadLabel"); const fileInput = document.getElementById("fileInput");
-    if (state.role !== "admin"){ if (uploadLabel) uploadLabel.style.display="none"; if (fileInput) fileInput.disabled=true; }
-    if (fileInput) fileInput.addEventListener("change", onFileChange);
+    const isAdmin = state.role === "admin";
 
+    // Mostrar/ocultar controles de Admin
+    const idsAdmin = ["uploadLabel","exportAll","clearData","expSede","expUsuario"];
+    idsAdmin.forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!isAdmin){ el.style.display="none"; el.disabled = true; }
+      else { el.style.display=""; el.disabled = false; }
+    });
+
+    // Carga archivo
+    const fileInput = document.getElementById("fileInput");
+    if (fileInput){
+      if (!isAdmin) fileInput.disabled = true;
+      fileInput.addEventListener("change", onFileChange);
+    }
+
+    // Listeners comunes (filtros/mapeo)
     ["filter_sede","filter_ultimo","filter_from","filter_to","agg","onlyTrue","fval1","fval2","fval3",
      "opt_sort","opt_top","opt_percent","opt_user_top","opt_user_dates"].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.addEventListener("change", ()=>{ updateKPIs(); renderAll(); });
+      const el=document.getElementById(id);
+      if(el) el.addEventListener("change", ()=>{ updateKPIs(); renderAll(); });
     });
-    const saveBtn=document.getElementById("savePrefs"); if (saveBtn) saveBtn.addEventListener("click", onSavePrefs);
-    const clr=document.getElementById("clearData"); if (clr) clr.addEventListener("click", ()=>{ clearRows().then(()=>location.reload()); });
-    const exp=document.getElementById("exportAll"); if (exp) exp.addEventListener("click", async ()=>{ const rows = state.rows?.length? state.rows : await loadRows(); exportCSV(rows,"datos_completos.csv"); });
+    const saveBtn=document.getElementById("savePrefs");
+    if (saveBtn) saveBtn.addEventListener("click", onSavePrefs);
 
-    const expSede = document.getElementById("expSede");
-    if (expSede) expSede.addEventListener("click", ()=>{
-      const rows = applyBaseFilters(state.rows);
-      const p = pivotSedeResumen(rows).rows;
-      exportCSV(p, "resumen_sede.csv");
-    });
-    const expUsuario = document.getElementById("expUsuario");
-    if (expUsuario) expUsuario.addEventListener("click", ()=>{
-      const rows = applyBaseFilters(state.rows);
-      const blocks = pivotUsuarioDetalle(rows);
-      const flat = [];
-      for (const b of blocks) for (const r of b.rows) flat.push({ultimo_usuario:b.user, SEDE:r.sede, FECHA:r.fecha, Total:r.total});
-      exportCSV(flat, "avance_ultimo_usuario.csv");
-    });
+    // Exportar/Borrar SOLO admin
+    if (isAdmin){
+      const clr=document.getElementById("clearData");
+      if (clr) clr.addEventListener("click", ()=>{ clearRows().then(()=>location.reload()); });
 
+      const exp=document.getElementById("exportAll");
+      if (exp) exp.addEventListener("click", async ()=>{
+        const rows = state.rows?.length? state.rows : await loadRows();
+        exportCSV(rows,"datos_completos.csv");
+      });
+
+      const expSede = document.getElementById("expSede");
+      if (expSede) expSede.addEventListener("click", ()=>{
+        const rows = applyBaseFilters(state.rows);
+        const p = pivotSedeResumen(rows).rows;
+        exportCSV(p, "resumen_sede.csv");
+      });
+
+      const expUsuario = document.getElementById("expUsuario");
+      if (expUsuario) expUsuario.addEventListener("click", ()=>{
+        const rows = applyBaseFilters(state.rows);
+        const blocks = pivotUsuarioDetalle(rows);
+        const flat = [];
+        for (const b of blocks) for (const r of b.rows) flat.push({ultimo_usuario:b.user, SEDE:r.sede, FECHA:r.fecha, Total:r.total});
+        exportCSV(flat, "avance_ultimo_usuario.csv");
+      });
+    }
+
+    // Cargar datos persistidos
     const stored = await loadRows();
     if (stored && stored.length){
       state.rows = stored; state.headers = Object.keys(stored[0] || {});
       fillMappingUI(); updateKPIs(); renderAll();
       setStatus(document.getElementById("status"), `Usando datos guardados del navegador (${stored.length} filas).`);
     } else {
-      setStatus(document.getElementById("status"), "Sin datos. Carga un CSV o Excel (solo Admin).");
+      setStatus(document.getElementById("status"), isAdmin ? "Sin datos. Carga un CSV o Excel (solo Admin)." : "Sin datos cargados.");
     }
   });
 })();
-
