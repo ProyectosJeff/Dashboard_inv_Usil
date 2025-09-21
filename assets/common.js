@@ -1,3 +1,4 @@
+// assets/common.js
 (function () {
   // ================== Claves de almacenamiento ==================
   const STORAGE_KEY = "dash_rows_v18";
@@ -166,61 +167,62 @@
     return headers.find(h => regs.some(rx => rx.test(h))) || null;
   }
 
-  // >>> toDate ROBUSTA (corrige seriales Excel, ISO, DD/MM/YYYY, etc.) <<<
-  function toDate(val) {
-    if (val == null || val === "") return null;
+ // === Conversor de FECHA robusto (sin corrimientos de zona) ===
+function toDate(val) {
+  if (val == null || val === "") return null;
 
-    // Ya es Date válido
-    if (val instanceof Date && !isNaN(val)) return val;
+  // 1) Ya es Date válido
+  if (val instanceof Date && !isNaN(val)) return val;
 
-    // NÚMEROS (serial Excel, timestamps)
-    if (typeof val === "number") {
-      // Serial Excel (sistema 1900): días desde 1899-12-30
-      // Rango típico 20000..60000 ≈ años 1954..2064
-      if (val > 20000 && val < 60000) {
-        return new Date(Math.round((val - 25569) * 86400 * 1000));
-      }
-      // Epoch (ms)
-      if (val > 1e12) return new Date(val);
-      // Epoch (s)
-      if (val > 1e9) return new Date(val * 1000);
-    }
+  // 2) Número de serie de Excel (sistema 1900)
+  if (typeof val === "number" && isFinite(val)) {
+    // Base UTC 1899-12-30 + "val" días
+    const baseUtc = Date.UTC(1899, 11, 30);                   // 1899-12-30
+    const utcMs   = baseUtc + Math.round(val * 86400 * 1000); // en UTC
+    const utc     = new Date(utcMs);
 
-    // CADENAS
-    if (typeof val === "string") {
-      const s = val.trim();
-      if (!s) return null;
-
-      // Serial Excel como string (4-5 dígitos)
-      if (/^\d{4,5}$/.test(s)) {
-        const n = parseInt(s, 10);
-        if (n > 20000 && n < 60000) {
-          return new Date(Math.round((n - 25569) * 86400 * 1000));
-        }
-      }
-
-      // Intento directo (ISO u otros)
-      let d = dayjs(s);
-      if (d.isValid()) return d.toDate();
-
-      // Formatos estrictos más comunes
-      const fmts = [
-        "DD/MM/YYYY", "D/M/YYYY",
-        "YYYY-MM-DD",
-        "MM/DD/YYYY", "M/D/YYYY",
-        "YYYY/MM/DD",
-        "DD-MM-YYYY", "D-M-YYYY",
-        "DD.MM.YYYY", "D.M.YYYY",
-        "DD/MM/YY", "D/M/YY", "DD-MM-YY", "D-M-YY"
-      ];
-      for (const f of fmts) {
-        d = dayjs(s, f, true);
-        if (d.isValid()) return d.toDate();
-      }
-    }
-
-    return null;
+    // Construye fecha LOCAL a medianoche usando los componentes UTC
+    // (evita que la zona horaria reste horas y cambie el día)
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
   }
+
+  // 3) Texto: normaliza espacios / separadores
+  let s = String(val).trim();
+  if (!s) return null;
+  s = s.replace(/\s+/g, " ")
+       .replace(/\/\s+/g, "/").replace(/\s+\//g, "/")
+       .replace(/-\s+/g, "-").replace(/\s+-/g, "-");
+
+  // Serial Excel escrito como texto (4–5 dígitos)
+  if (/^\d{4,5}$/.test(s)) {
+    const n = parseInt(s, 10);
+    if (n > 20000 && n < 60000) {
+      const baseUtc = Date.UTC(1899, 11, 30);
+      const utcMs   = baseUtc + Math.round(n * 86400 * 1000);
+      const utc     = new Date(utcMs);
+      return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+    }
+  }
+
+  // Formatos estrictos más comunes (prioriza DD/MM/YYYY)
+  const fmts = [
+    "DD/MM/YYYY","D/M/YYYY",
+    "DD-MM-YYYY","D-M-YYYY",
+    "DD/MM/YY","D/M/YY",
+    "YYYY-MM-DD","YYYY/MM/DD",
+    "DD/MM/YYYY HH:mm","DD/MM/YYYY HH:mm:ss",
+    "YYYY-MM-DDTHH:mm","YYYY-MM-DDTHH:mm:ss","YYYY-MM-DDTHH:mm:ss[Z]"
+  ];
+  for (const f of fmts) {
+    const d = dayjs(s, f, true);
+    if (d.isValid()) return new Date(d.year(), d.month(), d.date()); // medianoche local
+  }
+
+  // Último intento laxo
+  const d2 = dayjs(s);
+  return d2.isValid() ? new Date(d2.year(), d2.month(), d2.date()) : null;
+}
+
 
   function isValidated(v) {
     if (typeof v === "boolean") return v === true;
@@ -262,3 +264,4 @@
     loadUsers, saveUsers, resetUsers, requireLogin, requireRole
   };
 })();
+

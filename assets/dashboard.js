@@ -33,14 +33,32 @@
   }
   function destroyCharts(){ Object.keys(state.charts).forEach(destroyChart); }
 
-  function inRange(dateObj, fromISO, toISO){
-    if (!dateObj) return false;
-    let ok = true;
-    const d = dayjs(dateObj);
-    if (fromISO){ ok = ok && (d.isSame(fromISO) || d.isAfter(fromISO)); }
-    if (toISO){ ok = ok && (d.isSame(toISO) || d.isBefore(toISO)); }
-    return ok;
+// Reemplaza SOLO esta función en assets/dashboard.js
+// Reemplaza la función inRange actual por esta
+function inRange(dateObj, fromISO, toISO){
+  if (!dateObj) return false;
+
+  // Compararemos por día (00:00 a 23:59:59)
+  const d = dayjs(dateObj).startOf('day');
+
+  if (fromISO) {
+    // Acepta valores yyyy-mm-dd (input date) o dd/mm/yyyy
+    const f = dayjs(fromISO, ["YYYY-MM-DD","DD/MM/YYYY","D/M/YYYY"], true).isValid()
+      ? dayjs(fromISO, ["YYYY-MM-DD","DD/MM/YYYY","D/M/YYYY"], true).startOf('day')
+      : dayjs(fromISO).startOf('day');
+    if (d.isBefore(f)) return false; // excluye días antes del 'desde'
   }
+
+  if (toISO) {
+    const t = dayjs(toISO, ["YYYY-MM-DD","DD/MM/YYYY","D/M/YYYY"], true).isValid()
+      ? dayjs(toISO, ["YYYY-MM-DD","DD/MM/YYYY","D/M/YYYY"], true).endOf('day')
+      : dayjs(toISO).endOf('day');
+    if (d.isAfter(t)) return false; // excluye días después del 'hasta'
+  }
+
+  return true;
+}
+
   function bucketKey(dateObj, agg){
     const d = dayjs(dateObj);
     if (agg === "month") return d.format("YYYY-MM");
