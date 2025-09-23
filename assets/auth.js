@@ -78,32 +78,38 @@
     }
   }
 
-  // Siembra personalizada pedida por ti (solo UNA vez)
-  async function seedCustomUsersOnce() {
-    const FLAG = "dash_custom_seed_v1";
-    if (localStorage.getItem(FLAG)) return; // ya sembrado
+  // Reemplaza seedCustomUsersOnce() por esta:
+async function seedCustomUsers() {
+  const desired = [
+    { username: "Jeffry",  pass: "admin2025", role: "admin"   },
+    { username: "Daniel",  pass: "Daniel123", role: "admin"   },
+    { username: "Noel",    pass: "Noel123",   role: "usuario" },
+    { username: "Italo",   pass: "Italo123",  role: "usuario" },
+    { username: "Cliente", pass: "Cliente123",role: "usuario" },
+    { username: "Elizandro",  pass: "Elizandro123", role: "usuario" }
+  ];
 
-    const desired = [
-      { username: "Jeffry", pass: "admin2025", role: "admin"   },
-      { username: "Daniel", pass: "Daniel123", role: "admin"   },
-      { username: "Elizandro", pass: "Elizandro123", role: "usuario" },
-      { username: "Noel",   pass: "Noel123",   role: "usuario" },
-      { username: "Italo",  pass: "Italo123",  role: "usuario" },
-      { username: "Cliente",  pass: "Cliente123",  role: "usuario" }
-    ];
+  let list = readUsersRaw();
+  let changed = false;
 
-    let list = readUsersRaw();
-
-    for (const u of desired) {
-      const i = list.findIndex(x => (x.username || "").toLowerCase() === u.username.toLowerCase());
+  for (const u of desired) {
+    const idx = list.findIndex(x => (x.username || "").toLowerCase() === u.username.toLowerCase());
+    if (idx === -1) {
       const passHash = await sha256(u.pass);
-      if (i >= 0) { list[i].passHash = passHash; list[i].role = u.role; }
-      else { list.push({ username: u.username, passHash, role: u.role }); }
+      list.push({ username: u.username, passHash, role: u.role });
+      changed = true;
     }
-
-    writeUsersRaw(list);
-    localStorage.setItem(FLAG, "1"); // no volver a reescribir en futuros loads
   }
+
+  if (changed) writeUsersRaw(list);
+}
+
+// Y en el arranque, llama a ésta en lugar de seedCustomUsersOnce():
+(async () => {
+  await ensureSeeded();
+  await seedCustomUsers(); // <-- aquí
+})();
+
 
   // Ejecutar sembrados en orden
   (async () => {

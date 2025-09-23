@@ -206,6 +206,29 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- Botón para reabrir la guía -->
+<button id="btnHelp" class="btn" style="position:fixed; right:16px; bottom:16px; z-index:20;">
+  Ayuda / Guía
+</button>
+
+<!-- Overlay del tour -->
+<div id="tourBackdrop" class="tour-backdrop"></div>
+<div id="tourHighlight" class="tour-highlight"></div>
+<div id="tourArrow" class="tour-arrow"></div>
+<div id="tourCard" class="tour-card" role="dialog" aria-modal="true">
+  <div class="tour-header">
+    <!-- Cambia la imagen por la que quieras -->
+    <div class="tour-avatar" id="tourAvatar"
+         style="background-image:url('assets/mascota.png');"></div>
+    <div class="tour-title" id="tourTitle">¡Bienvenido!</div>
+  </div>
+  <div class="tour-text" id="tourText">Te guiaré por los pasos clave.</div>
+  <div class="tour-actions">
+    <button class="tour-btn ghost" id="tourSkip">Saltar</button>
+    <button class="tour-btn primary" id="tourNext">Siguiente</button>
+  </div>
+</div>
+
   <!-- Libs (papaparse, dayjs, chart.js, xlsx, etc) -->
 
   <script src="assets/common.js?v=6"></script>
