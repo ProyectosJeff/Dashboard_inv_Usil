@@ -86,6 +86,7 @@
     const desired = [
       { username: "Jeffry", pass: "admin2025", role: "admin"   },
       { username: "Daniel", pass: "Daniel123", role: "admin"   },
+      { username: "Elizandro", pass: "Elizandro123", role: "usuario" },
       { username: "Noel",   pass: "Noel123",   role: "usuario" },
       { username: "Italo",  pass: "Italo123",  role: "usuario" },
       { username: "Cliente",  pass: "Cliente123",  role: "usuario" }
