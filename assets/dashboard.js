@@ -67,47 +67,83 @@ function inRange(dateObj, fromISO, toISO){
   }
 
   function applyBaseFilters(rows){
-    const sedeFilter   = (document.getElementById("filter_sede")||{}).value || "";
-    const ultimoFilter = (document.getElementById("filter_ultimo")||{}).value || "";
-    const sedeCol = state.map.sede, ultimoCol = state.map.ultimo;
-    const dyn = getDynamicFilters();
-    return rows.filter(r => {
-      const okSede = !sedeFilter || ((r[sedeCol] ?? '').toString().trim() === sedeFilter);
-      const okUlt  = !ultimoFilter || ((r[ultimoCol] ?? '').toString().trim() === ultimoFilter);
-      const okDyn  = dyn.every(f => ((r[f.col] ?? '').toString().trim() === f.val));
-      return okSede && okUlt && okDyn;
+  const sedeFilter   = ((document.getElementById("filter_sede")||{}).value || "").trim();
+  const ultimoFilter = ((document.getElementById("filter_ultimo")||{}).value || "").trim();
+  const sedeCol   = state.map.sede;
+  const ultimoCol = state.map.ultimo;
+
+  const dyn = getDynamicFilters();
+  const norm = v => (v == null ? "" : String(v).trim().toLowerCase());
+
+  return rows.filter(r => {
+    const okSede = !sedeFilter   || norm(r[sedeCol])   === norm(sedeFilter);
+    const okUlt  = !ultimoFilter || norm(r[ultimoCol]) === norm(ultimoFilter);
+    const okDyn  = dyn.every(f => norm(r[f.col]) === norm(f.val));
+    return okSede && okUlt && okDyn;
+  });
+}
+
+
+  // ========= KPIs =========
+function updateKPIs(){
+  const sedeCol   = state.map.sede;
+  const ultimoCol = state.map.ultimo;
+  const dateCol   = state.map.fecha;
+
+  const elTotal = document.getElementById("kpiTotal");
+  const elSedes = document.getElementById("kpiSedes");
+  const elUsers = document.getElementById("kpiUsers");
+  const elRange = document.getElementById("kpiRange");
+
+  // 1) Aplica sede/usuario/filtros dinámicos
+  const base = applyBaseFilters(state.rows);
+
+  // 2) Aplica rango de fechas (si está mapeada la columna)
+  const fromISO = (document.getElementById("filter_from")||{}).value || null;
+  const toISO   = (document.getElementById("filter_to")  ||{}).value || null;
+
+  let filtered = base;
+  if (dateCol){
+    filtered = base.filter(r => {
+      const d = toDate(r[dateCol]);
+      return d && inRange(d, fromISO, toISO);
     });
   }
 
-  // ========= KPIs =========
-  function updateKPIs(){
-    const total = state.rows.length;
-    const sedeCol = state.map.sede;
-    const ultimoCol = state.map.ultimo;
-    const dateCol = state.map.fecha;
+  // 3) KPIs (todos con los mismos filtros)
+  if (elTotal) elTotal.textContent = filtered.length;
 
-    const elTotal = document.getElementById("kpiTotal");
-    const elSedes = document.getElementById("kpiSedes");
-    const elUsers = document.getElementById("kpiUsers");
-    const elRange = document.getElementById("kpiRange");
-
-    if (elTotal) elTotal.textContent = total;
-    if (elSedes) elSedes.textContent = sedeCol ? new Set(state.rows.map(r => (r[sedeCol] ?? "").toString().trim()).filter(Boolean)).size : "—";
-    if (elUsers) elUsers.textContent = ultimoCol ? new Set(state.rows.map(r => (r[ultimoCol] ?? "").toString().trim()).filter(Boolean)).size : "—";
-
-    if (dateCol){
-      const fromISO = (document.getElementById("filter_from")||{}).value || null;
-      const toISO   = (document.getElementById("filter_to")||{}).value || null;
-      const dates = state.rows
-        .map(r => toDate(r[dateCol])).filter(Boolean)
-        .filter(d=>inRange(d, fromISO, toISO))
-        .map(d => dayjs(d).format("YYYY-MM-DD"))
-        .sort();
-      if (elRange) elRange.textContent = dates.length ? `${dates[0]} → ${dates[dates.length-1]}` : "—";
+  if (elSedes){
+    if (sedeCol){
+      const s = new Set(filtered.map(r => (r[sedeCol] ?? "").toString().trim()).filter(Boolean));
+      elSedes.textContent = s.size;
     } else {
-      if (elRange) elRange.textContent = "— (mapea Fecha)";
+      elSedes.textContent = "—";
     }
   }
+
+  if (elUsers){
+    if (ultimoCol){
+      const s = new Set(filtered.map(r => (r[ultimoCol] ?? "").toString().trim()).filter(Boolean));
+      elUsers.textContent = s.size;
+    } else {
+      elUsers.textContent = "—";
+    }
+  }
+
+  if (elRange){
+    if (dateCol){
+      const dates = filtered
+        .map(r => toDate(r[dateCol])).filter(Boolean)
+        .map(d => dayjs(d).format("YYYY-MM-DD"))
+        .sort();
+      elRange.textContent = dates.length ? `${dates[0]} → ${dates[dates.length-1]}` : "—";
+    } else {
+      elRange.textContent = "— (mapea Fecha)";
+    }
+  }
+}
+
 
   // ========= Filtros dinámicos =========
   function fillHeaderOptions(selectId){
