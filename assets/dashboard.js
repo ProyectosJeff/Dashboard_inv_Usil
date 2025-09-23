@@ -950,5 +950,11 @@ function updateKPIs(){
   if (el.help) el.help.addEventListener("click", ()=> start(true));
 
   // Arranca luego de montar el dashboard
-  document.addEventListener("DOMContentLoaded", ()=> setTimeout(()=> start(false), 600));
+  //document.addEventListener("DOMContentLoaded", ()=> setTimeout(()=> start(false), 600));
+// ——— Sin auto-inicio: solo manual ———
+window.DashTour = {
+  start: () => start(true),                  // fuerza inicio aunque ya se haya visto
+  reset: () => localStorage.removeItem(SEEN_KEY) // por si quieres permitir “ver desde cero”
+};
 })();
+
